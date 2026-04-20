@@ -160,12 +160,64 @@ with tab2:
 ######################################################################################################################################
 with tab3:
     st.subheader("Performance Overview")
+    
     if not st.session_state.exp_data.empty:
-        # Dummy chart for visualization
-        chart_data = pd.DataFrame(np.random.randn(20, 2), columns=['Yield', 'Purity'])
-        st.scatter_chart(chart_data)
+        # Clean data for plotting (remove rows without yields)
+        plot_data = st.session_state.exp_data.dropna(subset=['Yield (%)']).copy()
+        
+        if not plot_data.empty:
+            # 1. Yield vs. Temperature Scatter Chart
+            st.write("#### 🌡️ Yield vs. Temperature")
+            st.caption("Visualizing how temperature affects the reaction outcome.")
+            st.scatter_chart(
+                data=plot_data, 
+                x="Temp", 
+                y="Yield (%)", 
+                color="Catalyst",
+                use_container_width=True
+            )
+
+            st.divider()
+
+            # 2. Optimization Learning Curve
+            st.write("#### 📉 Optimization Learning Curve")
+            st.info("The green line tracks the 'Best Result' found as the search progresses.")
+            
+            # Calculate the cumulative maximum (the best yield found up to that run)
+            plot_data['Best Yield So Far'] = plot_data['Yield (%)'].cummax()
+            
+            # Plotting the current yield vs. the best yield
+            # We use 'Run' as the X-axis to show progress over time
+            st.line_chart(
+                data=plot_data, 
+                x="Run", 
+                y=["Yield (%)", "Best Yield So Far"],
+                color=["#FF4B4B", "#28a745"], # Red for current, Green for best
+                use_container_width=True
+            )
+            
+            st.divider()
+
+            # 3. Data Export
+            st.write("#### 💾 Export Results")
+            st.write("Download the complete experiment log for your lab notebook or publication.")
+            
+            # Convert dataframe to CSV
+            csv_data = st.session_state.exp_data.to_csv(index=False).encode('utf-8')
+            
+            st.download_button(
+                label="📥 Download Experiment Log (.csv)",
+                data=csv_data,
+                file_name='oled_discovery_log.csv',
+                mime='text/csv',
+                type="secondary",
+                use_container_width=True
+            )
+        else:
+            st.warning("Data detected, but 'Yield (%)' column is empty. Please enter results in Tab 2.")
     else:
-        st.info("No data available yet. Complete a run in the 'Live Optimization' tab.")
+        st.info("💡 No experiments logged yet. Run some 'Auto-Experiments' in the sidebar or add them manually in Tab 2.")
+
 ######################################################################################################################################
 # Footer
 st.markdown("---")
@@ -211,36 +263,48 @@ def simulate_lab_yield(suggestion):
     yield_with_noise = base_yield + np.random.normal(0, 2)
     
     return round(min(max(yield_with_noise, 0), 99), 1)
-
-# --- SIDEBAR TESTING UI ---
+######################################################################################################################################
+# --- SIDEBAR TESTING UI 
 st.sidebar.divider()
 st.sidebar.subheader("🧪 Automation & QA")
-if st.sidebar.button("Run 5 Auto-Experiments"):
-    for _ in range(5):
-        # 1. Get AI Suggestion
-        s = get_next_suggestion(
-            st.session_state.exp_data, 
-            temp_range, # from your slider
-            res_time,   # from your slider
-            catalysts   # from your multiselect
-        )
-        
-        # 2. Simulate the 'Lab Result'
-        mock_yield = simulate_lab_yield(s)
-        
-        # 3. Log the data
-        new_row = {
-            "Run": len(st.session_state.exp_data) + 1,
-            "Temp": s[0],
-            "Time": s[1],
-            "Catalyst": s[2],
-            "Yield (%)": mock_yield
-        }
-        st.session_state.exp_data = pd.concat([
-            st.session_state.exp_data, 
-            pd.DataFrame([new_row])
-        ], ignore_index=True)
+
+if st.sidebar.button("Run 5 Auto-Experiments", use_container_width=True):
+    # This 'status' block creates a progress indicator and 'locks' the focus
+    with st.status("🤖 AI is simulating experiments...", expanded=True) as status:
+        for i in range(5):
+            st.write(f"Running Experiment {i+1}/5...")
+            
+            # 1. Get AI Suggestion
+            s = get_next_suggestion(
+                st.session_state.exp_data, 
+                temp_range, 
+                res_time, 
+                catalysts
+            )
+            
+            # 2. Simulate the 'Lab Result'
+            mock_yield = simulate_lab_yield(s)
+            
+            # 3. Log the data
+            new_row = {
+                "Run": len(st.session_state.exp_data) + 1,
+                "Temp": s[0],
+                "Time": s[1],
+                "Catalyst": s[2],
+                "Yield (%)": mock_yield
+            }
+            st.session_state.exp_data = pd.concat([
+                st.session_state.exp_data, 
+                pd.DataFrame([new_row])
+            ], ignore_index=True)
+            
+            # Optional: add a tiny sleep to make the animation visible
+            import time
+            time.sleep(0.3) 
+            
+        status.update(label="✅ All 5 Experiments Complete!", state="complete", expanded=False)
     
     st.rerun()
+
 
 ######################################################################################################################################
