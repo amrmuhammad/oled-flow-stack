@@ -14,6 +14,10 @@ if 'exp_data' not in st.session_state:
 #####################################################################################################################################
 # --- OPTIMIZATION ENGINE ---
 def get_next_suggestion(existing_data, temp_range, time_range, catalysts):
+    # 1. CLEAN DATA: Only use rows that have a valid Yield number
+    # This prevents the "NoneType" error
+    clean_data = existing_data.dropna(subset=['Yield (%)'])
+    
     # Define the Search Space
     search_space = [
         Integer(temp_range[0], temp_range[1], name='Temp'),
@@ -21,18 +25,17 @@ def get_next_suggestion(existing_data, temp_range, time_range, catalysts):
         Categorical(catalysts, name='Catalyst')
     ]
     
-    opt = Optimizer(search_space, base_estimator="GP", acq_func="EI") # Expected Improvement
+    opt = Optimizer(search_space, base_estimator="GP", acq_func="EI")
 
-    if not existing_data.empty:
-        # Tell the optimizer what we already know
-        # Note: skopt minimizes, so we pass (-Yield) to maximize yield
-        X = existing_data[['Temp', 'Time', 'Catalyst']].values.tolist()
-        y = (-existing_data['Yield (%)']).values.tolist()
+    # 2. CHECK: Only "tell" the optimizer if there is actually data to learn from
+    if not clean_data.empty:
+        X = clean_data[['Temp', 'Time', 'Catalyst']].values.tolist()
+        # Convert to float to ensure mathematical operations work
+        y = (-clean_data['Yield (%)'].astype(float)).values.tolist()
         opt.tell(X, y)
 
-    # Ask for the next best point
-    next_x = opt.ask()
-    return next_x
+    return opt.ask()
+
 #####################################################################################################################################
 
 
@@ -84,35 +87,43 @@ with tab1:
 with tab2:
     st.subheader("Active Run Control")
     
-    # Editable Data Entry
+    # 1. Initialize a placeholder for the suggestion if it doesn't exist
+    if 'current_suggestion' not in st.session_state:
+        st.session_state.current_suggestion = None
+
+    # 2. Data Editor
     st.write("Enter results from the lab below:")
     edited_df = st.data_editor(
         st.session_state.exp_data, 
         num_rows="dynamic",
-        column_config={
-            "Yield (%)": st.column_config.NumberColumn(format="%d%%", min_value=0, max_value=100)
-        }
+        key="main_editor" # Adding a key helps Streamlit track state
     )
     st.session_state.exp_data = edited_df
 
+    # 3. Suggestion Logic
     if st.button("🤖 Suggest Next Experiment"):
-        if catalysts: # Ensure user has selected catalysts in Tab 1
-            suggestion = get_next_suggestion(
+        if catalysts:
+            # Store the suggestion in session_state so it survives the re-run
+            st.session_state.current_suggestion = get_next_suggestion(
                 st.session_state.exp_data, 
                 temp_range, 
                 res_time, 
                 catalysts
             )
-            
-            st.success(f"**Recommended Parameters:**")
-            col_a, col_b, col_c = st.columns(3)
-            col_a.metric("Temperature", f"{suggestion[0]}°C")
-            col_b.metric("Res. Time", f"{suggestion[1]} min")
-            col_c.metric("Catalyst", suggestion[2])
-            
-            st.info("💡 Run this experiment and enter the yield above to update the model.")
         else:
             st.error("Please select at least one catalyst in the 'Design' tab first.")
+
+    # 4. Display the suggestion (it will now stay visible!)
+    if st.session_state.current_suggestion:
+        s = st.session_state.current_suggestion
+        st.success(f"**Recommended Parameters:**")
+        col_a, col_b, col_c = st.columns(3)
+        col_a.metric("Temperature", f"{s[0]}°C")
+        col_b.metric("Res. Time", f"{s[1]} min")
+        col_c.metric("Catalyst", s[2])
+        
+        st.info("💡 Tip: Enter these values into the table above. The suggestion will stay here until you request a new one.")
+
 ######################################################################################################################################
 with tab3:
     st.subheader("Performance Overview")
