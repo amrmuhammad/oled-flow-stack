@@ -87,42 +87,75 @@ with tab1:
 with tab2:
     st.subheader("Active Run Control")
     
-    # 1. Initialize a placeholder for the suggestion if it doesn't exist
+    # 1. Initialize suggestion state if it doesn't exist
     if 'current_suggestion' not in st.session_state:
         st.session_state.current_suggestion = None
 
-    # 2. Data Editor
-    st.write("Enter results from the lab below:")
+    # 2. Data Editor: Shows the log of all experiments
+    st.write("### 📋 Experiment Log")
+    st.info("The table below tracks your progress. Type your results in the 'Yield (%)' column.")
+    
+    # We use a key to ensure the editor state is preserved during re-runs
     edited_df = st.data_editor(
         st.session_state.exp_data, 
         num_rows="dynamic",
-        key="main_editor" # Adding a key helps Streamlit track state
+        key="main_editor",
+        use_container_width=True
     )
     st.session_state.exp_data = edited_df
 
-    # 3. Suggestion Logic
-    if st.button("🤖 Suggest Next Experiment"):
-        if catalysts:
-            # Store the suggestion in session_state so it survives the re-run
-            st.session_state.current_suggestion = get_next_suggestion(
-                st.session_state.exp_data, 
-                temp_range, 
-                res_time, 
-                catalysts
-            )
-        else:
-            st.error("Please select at least one catalyst in the 'Design' tab first.")
+    st.divider()
 
-    # 4. Display the suggestion (it will now stay visible!)
+    # 3. Optimization Logic
+    col_btn1, col_btn2 = st.columns([1, 2])
+    
+    with col_btn1:
+        if st.button("🤖 Suggest Next Experiment", use_container_width=True):
+            if catalysts:
+                # Calls your Bayesian optimizer
+                st.session_state.current_suggestion = get_next_suggestion(
+                    st.session_state.exp_data, 
+                    temp_range, 
+                    res_time, 
+                    catalysts
+                )
+            else:
+                st.error("Please select at least one catalyst in the 'Design' tab first.")
+
+    # 4. Display Suggestion and "Add to Log" Button
     if st.session_state.current_suggestion:
         s = st.session_state.current_suggestion
-        st.success(f"**Recommended Parameters:**")
-        col_a, col_b, col_c = st.columns(3)
-        col_a.metric("Temperature", f"{s[0]}°C")
-        col_b.metric("Res. Time", f"{s[1]} min")
-        col_c.metric("Catalyst", s[2])
         
-        st.info("💡 Tip: Enter these values into the table above. The suggestion will stay here until you request a new one.")
+        st.success("**AI Recommended Parameters Found!**")
+        
+        # Display the parameters in nice metric boxes
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Temperature", f"{s[0]} °C")
+        m2.metric("Res. Time", f"{s[1]} min")
+        m3.metric("Catalyst", s[2])
+        
+        # Button to automatically move these values into the table
+        if st.button("📝 Add This Suggestion to Log", type="primary", use_container_width=True):
+            new_row = {
+                "Run": len(st.session_state.exp_data) + 1,
+                "Temp": s[0],
+                "Time": s[1],
+                "Catalyst": s[2],
+                "Yield (%)": None # User fills this after the lab run
+            }
+            
+            # Update the dataframe
+            st.session_state.exp_data = pd.concat([
+                st.session_state.exp_data, 
+                pd.DataFrame([new_row])
+            ], ignore_index=True)
+            
+            # Clear the suggestion so the UI stays clean
+            st.session_state.current_suggestion = None
+            
+            # Refresh to show new row in the table
+            st.rerun()
+
 
 ######################################################################################################################################
 with tab3:
@@ -138,3 +171,56 @@ with tab3:
 st.markdown("---")
 st.caption("OLED-Flow-Stack | Open Source Research Project | v0.1.0-alpha")
 
+######################################################################################################################################
+
+# --- AUTOMATED TESTING MODULE ---
+def simulate_lab_yield(suggestion):
+    """
+    Simulates a real OLED reaction. 
+    Target: 115°C, 12 min, Catalyst: XPhos Pd G3
+    """
+    s_temp, s_time, s_cat = suggestion
+    
+    # Calculate 'distance' from ideal conditions
+    temp_score = max(0, 100 - abs(s_temp - 115))
+    time_score = max(0, 100 - abs(s_time - 12))
+    cat_score = 100 if s_cat == "XPhos Pd G3" else 40
+    
+    # Final yield is an average with some 'random noise' to mimic real lab error
+    base_yield = (temp_score + time_score + cat_score) / 3
+    yield_with_noise = base_yield + np.random.normal(0, 2)
+    
+    return round(min(max(yield_with_noise, 0), 99), 1)
+
+# --- SIDEBAR TESTING UI ---
+st.sidebar.divider()
+st.sidebar.subheader("🧪 Automation & QA")
+if st.sidebar.button("Run 5 Auto-Experiments"):
+    for _ in range(5):
+        # 1. Get AI Suggestion
+        s = get_next_suggestion(
+            st.session_state.exp_data, 
+            temp_range, # from your slider
+            res_time,   # from your slider
+            catalysts   # from your multiselect
+        )
+        
+        # 2. Simulate the 'Lab Result'
+        mock_yield = simulate_lab_yield(s)
+        
+        # 3. Log the data
+        new_row = {
+            "Run": len(st.session_state.exp_data) + 1,
+            "Temp": s[0],
+            "Time": s[1],
+            "Catalyst": s[2],
+            "Yield (%)": mock_yield
+        }
+        st.session_state.exp_data = pd.concat([
+            st.session_state.exp_data, 
+            pd.DataFrame([new_row])
+        ], ignore_index=True)
+    
+    st.rerun()
+
+######################################################################################################################################
