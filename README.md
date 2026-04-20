@@ -1,7 +1,7 @@
 # 💡 OLED-Flow-Stack
 **The Open-Source Brain for Autonomous OLED Material Synthesis**
 
-[![Streamlit App](https://streamlit.io)](YOUR_DEPLOYED_APP_LINK)
+[![Streamlit App](https://streamlit.io)](https://oled-flow-stack.streamlit.app/)
 [![License: MIT](https://shields.io)](https://opensource.org)
 
 ## 🚀 The Vision
