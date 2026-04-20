@@ -172,7 +172,27 @@ st.markdown("---")
 st.caption("OLED-Flow-Stack | Open Source Research Project | v0.1.0-alpha")
 
 ######################################################################################################################################
+# --- SIDEBAR: BEST RESULT TROPHY ---
+st.sidebar.divider()
+st.sidebar.subheader("🏆 Hall of Fame")
 
+# Clean the data to ensure we only look at valid numbers
+valid_yields = st.session_state.exp_data.dropna(subset=['Yield (%)'])
+
+if not valid_yields.empty:
+    # Find the row with the highest yield
+    best_run = valid_yields.loc[valid_yields['Yield (%)'].idxmax()]
+    
+    # Display the "Trophy"
+    st.sidebar.success(f"**Best Yield: {best_run['Yield (%)']}%**")
+    
+    with st.sidebar.expander("View Best Conditions"):
+        st.write(f"**Temp:** {best_run['Temp']} °C")
+        st.write(f"**Time:** {best_run['Time']} min")
+        st.write(f"**Catalyst:** {best_run['Catalyst']}")
+else:
+    st.sidebar.info("No successful runs logged yet. Start optimizing!")
+######################################################################################################################################    
 # --- AUTOMATED TESTING MODULE ---
 def simulate_lab_yield(suggestion):
     """
