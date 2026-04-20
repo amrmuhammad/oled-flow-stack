@@ -53,4 +53,7 @@ streamlit run app.py
 
 Distributed under the MIT License. See LICENSE for more information.    
     
+## Maintained by [Amr Muhammad]
+
+Advancing the future of display technology through open science.
     
